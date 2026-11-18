@@ -1,0 +1,9 @@
+# dsh-inline-attachments bundle patch.
+#
+# One insert adds the Host half. The browser half is discovered through the
+# package's `dsh.client` block and registers itself into
+# `conversation.input.overlay` (a list slot), so no shipped row is replaced or
+# disabled. Removing the bundle restores the stock composer.
+- insert:
+    - id: inline-attachments
+      name: dsh-inline-attachments

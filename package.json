@@ -1,0 +1,60 @@
+{
+  "name": "dsh-inline-attachments",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "description": "行内附件：在输入框里把图/文件放在哪里，模型就在哪个位置读到它——不用再写“如图 1、图 2 等等”。",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "attachment",
+    "composer"
+  ],
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js"
+  },
+  "files": [
+    "index.js",
+    "host.js",
+    "client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "docs",
+    "LICENSE",
+    "icon.svg"
+  ],
+  "scripts": {
+    "test": "node --test test/host.test.mjs test/client-load.test.mjs test/host-wiring.test.mjs test/client-flow.test.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-input-trigger"
+      ]
+    }
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Panther-w",
+    "email": "22514352+Panther-w@users.noreply.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Panther-w/dsh-inline-attachments.git"
+  },
+  "homepage": "https://github.com/Panther-w/dsh-inline-attachments#readme",
+  "bugs": {
+    "url": "https://github.com/Panther-w/dsh-inline-attachments/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "icon": "./icon.svg"
+}
