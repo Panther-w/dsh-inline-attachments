@@ -12,13 +12,19 @@
 
 ## 安装
 
-在 DSH 的插件市场搜索「行内附件」安装。
+在 DSH Desktop 打开「插件 → 添加插件」，输入 `dsh-inline-attachments`；或：
+
+```sh
+dsh plugin --profile desktop add dsh-inline-attachments
+```
+
+市场收录后也可以搜「行内附件」。
 
 从源码开发/安装：见 [PUBLISHING.md](https://github.com/Panther-w/dsh-inline-attachments/blob/main/PUBLISHING.md)。
 
 ## 卸载
 
-在插件市场卸载（或禁用）`dsh-inline-attachments`，重启 DSH 即恢复原样。
+在 DSH 的插件页卸载（或禁用）`dsh-inline-attachments`，重启 DSH 即恢复原样。
 
 ## 验证
 

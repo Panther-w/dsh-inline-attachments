@@ -1,16 +1,17 @@
 # 发布材料（0.1.0）
 
-> 文案已按“免费开源、少说细节”收简；**还没有** npm publish、git push 或市场 PR。
+> GitHub 仓库/Release 和 npm `0.1.0` 已发布；市场暂缓。以下保留为后续市场提交与维护记录。
 
 ## 身份
 
 - 名称：`dsh-inline-attachments`
 - 版本：`0.1.0`
 - 作者：`Panther-w`
-- 许可：MIT（发布前补 LICENSE）
+- 许可：MIT
 - 仓库：`https://github.com/Panther-w/dsh-inline-attachments`
 - npm：`dsh-inline-attachments`
 - 实测：macOS DSH Desktop `0.2.2-rc.3`
+- 发布状态：GitHub `v0.1.0` 已发布；npm `0.1.0` 已发布（首次发布经过 staged review，现已 latest）
 
 ## 一句话（GitHub / npm / 市场统一）
 
