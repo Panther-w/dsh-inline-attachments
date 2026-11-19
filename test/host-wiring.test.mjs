@@ -28,7 +28,7 @@ test('index.js registers one pre-step waterfall and rewrites enter decisions', a
   assert.equal(decision.kind, 'enter')
   assert.deepEqual(
     decision.messages[0].content.map((block) => (block.type === 'text' ? `text:${block.text}` : block.type)),
-    ['text:前', 'image', 'text:后'],
+    ['text:前', 'image', 'text: 后'],
   )
 })
 

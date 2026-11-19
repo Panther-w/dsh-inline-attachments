@@ -16,7 +16,7 @@ test('interleaves two images at their markers', () => {
     image('a'), image('b'),
     text(`前${stamp(1)}中${stamp(2)}后`),
   ]))
-  assert.deepEqual(kinds(rewritten.content), ['text:前', 'image', 'text:中', 'image', 'text:后'])
+  assert.deepEqual(kinds(rewritten.content), ['text:前', 'image', 'text: 中', 'image', 'text: 后'])
   assert.equal(rewritten.content[1].attachment.attachmentId, 'a')
   assert.equal(rewritten.content[3].attachment.attachmentId, 'b')
 })
@@ -25,7 +25,7 @@ test('supports file attachments in the same order', () => {
   const rewritten = rewriteMessage(userMessage([
     file('f1'), image('a'), text(`看${stamp(1)}和${stamp(2)}`),
   ]))
-  assert.deepEqual(kinds(rewritten.content), ['text:看', 'file', 'text:和', 'image'])
+  assert.deepEqual(kinds(rewritten.content), ['text:看', 'file', 'text: 和', 'image'])
 })
 
 test('drops zero and out-of-range markers without touching the text', () => {
@@ -73,7 +73,7 @@ test('interleaves across multiple text blocks', () => {
   const rewritten = rewriteMessage(userMessage([
     image('a'), text(`A${stamp(1)}`), text('B'),
   ]))
-  assert.deepEqual(kinds(rewritten.content), ['text:A', 'image', 'text:B'])
+  assert.deepEqual(kinds(rewritten.content), ['text:A', 'image', 'text: B'])
 })
 
 test('a duplicated marker inserts the attachment once', () => {
@@ -81,13 +81,4 @@ test('a duplicated marker inserts the attachment once', () => {
     image('a'), text(`${stamp(1)}${stamp(1)}`),
   ]))
   assert.deepEqual(kinds(rewritten.content), ['image'])
-})
-
-
-test('keeps the visible chip label in the text before the image', () => {
-  const rewritten = rewriteMessage(userMessage([
-    image('a'),
-    text(`前@cat.png${stamp(1)}后`),
-  ]))
-  assert.deepEqual(kinds(rewritten.content), ['text:前@cat.png', 'image', 'text:后'])
 })

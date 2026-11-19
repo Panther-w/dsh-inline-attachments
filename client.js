@@ -48,7 +48,14 @@ window.__ModuleLoader__.load({
         if (document.getElementById('dsh-inline-attachment-outline-style') !== null) return
         const style = document.createElement('style')
         style.id = 'dsh-inline-attachment-outline-style'
-        style.textContent = `.${OUTLINE_CLASS}{box-shadow:inset 0 0 0 2px rgba(65,118,230,.45);box-shadow:inset 0 0 0 2px color-mix(in srgb, var(--dsw-alias-state-business-primary, #4176e6) 55%, transparent);}`
+        // inset box-shadow 会被铺满的缩略图盖住（rc.5 无内边距），改用 outline 画在内容之上。
+        // 颜色：主色降到 55% 透明度——比纯淡蓝清楚，又不像纯主色那样刺眼。
+        style.textContent = `.${OUTLINE_CLASS}{`
+          + `outline:2px solid rgba(65,118,230,.55) !important;`
+          + `outline:2px solid color-mix(in srgb, var(--dsw-alias-state-business-primary,#4176e6) 55%, transparent) !important;`
+          + `outline-offset:-2px !important;border-radius:8px;position:relative;}`
+          + `.${OUTLINE_CLASS}::after{content:'';position:absolute;inset:0;border-radius:8px;`
+          + `box-shadow:inset 0 0 0 2px rgba(65,118,230,.55);pointer-events:none;}`
         ;(document.head ?? document.documentElement).appendChild(style)
       } catch (error) {
         // 纯视觉，失败不影响输入。
@@ -333,7 +340,7 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * 同名附件在草稿里追加显示序号：image.png → image.png（2）。只改 chip 标签，
+     * 同名附件在草稿里追加显示序号：image.png → image.png (2)。只改 chip 标签，
      * 剪贴板仍是 @image.png，codec 仍按附件 id 工作。
      * @param {string} base 基础文件名。
      * @param {Map<string, any>} records 已插入的 chip 记录。
@@ -349,12 +356,14 @@ window.__ModuleLoader__.load({
           max = Math.max(max, 1)
           continue
         }
-        if (record.label.startsWith(`${base}（`) && record.label.endsWith('）')) {
-          const parsed = Number(record.label.slice(base.length + 1, -1))
+        for (const pair of [[' (', ')'], ['（', '）']]) {
+          if (!record.label.startsWith(`${base}${pair[0]}`) || !record.label.endsWith(pair[1])) continue
+          const parsed = Number(record.label.slice(base.length + pair[0].length, -pair[1].length))
           if (Number.isFinite(parsed) && parsed > 0) max = Math.max(max, parsed)
         }
       }
-      return max === 0 ? base : `${base}（${max + 1}）`
+      // 序号用英文括号包裹：image.png (2)；单张图不加序号。
+      return max === 0 ? base : `${base} (${max + 1})`
     }
 
     /**
@@ -643,13 +652,31 @@ window.__ModuleLoader__.load({
         const chipOf = (target) => (typeof Element === 'function' && target instanceof Element
           ? target.closest('[data-composer-chip="inline-attachments"]')
           : null)
-        const cardOf = () => {
+        const cardOf = (chip) => {
+          // 优先从 chip 自身往上找 composer 卡片：overlay 锚点不一定在卡片内部，
+          // 找不到就直接 return 会让描边永远不出现。
+          if (chip !== null && chip !== undefined && typeof chip.closest === 'function') {
+            const fromChip = chip.closest('[data-composer-card]')
+            if (fromChip !== null && fromChip !== undefined) return fromChip
+          }
           const anchor = anchorRef.current
-          return anchor === null || anchor === undefined || typeof anchor.closest !== 'function'
+          const fromAnchor = anchor === null || anchor === undefined || typeof anchor.closest !== 'function'
             ? undefined
             : anchor.closest('[data-composer-card]')
+          if (fromAnchor !== null && fromAnchor !== undefined) return fromAnchor
+          return typeof document === 'undefined' ? undefined : document
         }
+        // 记住上一次描边的元素：兜底查找可能落到 card 子树之外，
+        // 只按 card 查询会清不掉，导致描边残留到刷新。
+        let outlined = null
         const clearOutline = (card) => {
+          if (outlined !== null) {
+            try {
+              outlined.classList.remove(OUTLINE_CLASS)
+              delete outlined.dataset.inlineAttachOutline
+            } catch (error) { /* 元素已卸载 */ }
+            outlined = null
+          }
           const scope = card ?? cardOf()
           if (scope === undefined || scope === null || typeof scope.querySelectorAll !== 'function') return
           for (const element of scope.querySelectorAll('[data-inline-attach-outline="1"]')) {
@@ -661,8 +688,8 @@ window.__ModuleLoader__.load({
           try {
             const chip = chipOf(event.target)
             if (chip === null) { clearOutline(); return }
-            const card = cardOf()
-            if (card === undefined || card === null || typeof card.contains !== 'function' || !card.contains(chip)) return
+            const card = cardOf(chip)
+            if (card === undefined || card === null) return
             const chips = [...card.querySelectorAll('[data-composer-chip="inline-attachments"]')]
             const index = chips.indexOf(chip)
             if (index < 0) return
@@ -674,13 +701,40 @@ window.__ModuleLoader__.load({
             if (occurrence === undefined) return
             const parsed = parseRef(occurrence.ref)
             if (parsed === undefined) return
+            const selfResolved = resolveAttachments(runtime.ctx, [parsed.a])
+            const selfKind = selfResolved !== undefined && selfResolved.length > 0 ? selfResolved[0].kind : undefined
+            // 只有图片 chip 才描边：文件 chip 没有对应缩略图，兜底会错描到别的图上。
+            if (selfKind !== 'image') { clearOutline(); return }
             const entry = registry.get(keyOf(sessionId) ?? '')
             const url = entry === undefined ? undefined : entry.previews.get(parsed.a)
-            if (typeof url !== 'string' || url === '') return
-            const image = [...card.querySelectorAll('img')].find((element) => element.src === url)
+            let images = [...card.querySelectorAll('img')]
+            if (images.length === 0 && typeof document !== 'undefined') {
+              // 缩略图区可能不在同一棵子树里：退一步按整页的 composer 缩略图找。
+              images = [...document.querySelectorAll('[data-composer-card] img')]
+            }
+            if (images.length === 0 && typeof document !== 'undefined') {
+              images = [...document.querySelectorAll('img')]
+            }
+            // 1) URL 精确匹配；2) 匹配不到就按“第 N 张图片缩略图”兜底
+            //    （附件由核心 intake 生成时 URL 与 registry 缓存可能不一致）。
+            let image = typeof url === 'string' && url !== ''
+              ? images.find((element) => element.src === url)
+              : undefined
+            if (image === undefined) {
+              let nth = 0
+              for (let i = 0; i < index; i += 1) {
+                const other = parseRef(occurrences[i] === undefined ? undefined : occurrences[i].ref)
+                if (other === undefined) continue
+                const resolved = resolveAttachments(runtime.ctx, [other.a])
+                const kind = resolved !== undefined && resolved.length > 0 ? resolved[0].kind : undefined
+                if (kind === 'image') nth += 1
+              }
+              image = images[nth]
+            }
             const target = image === undefined ? undefined : (image.closest('button') ?? image)
             if (target === undefined || target === null) return
             clearOutline(card)
+            outlined = target
             target.dataset.inlineAttachOutline = '1'
             target.classList.add(OUTLINE_CLASS)
           } catch (error) {
@@ -877,22 +931,34 @@ window.__ModuleLoader__.load({
        */
       async serialize(ref) {
         const parsed = parseRef(ref)
-        if (parsed === undefined) return stampOf(0)
+        if (parsed === undefined) return '［附件已移除］'
         // 归属会话优先用渲染时记录的当前会话（迁移草稿后 ref 里的 s 可能是旧的）。
         const owner = refOwner.get(ref) ?? parsed.s
         const live = owner === undefined ? undefined : liveAttachmentIds(owner)
         if (live !== undefined) {
           const index = live.indexOf(parsed.a) + 1
-          if (index > 0) {
-            // 保留 chip 的可见链接（@文件名），让发送后的文本也带着它；
-            // 标记仍放在链接后面，Host 在标记处插入图片块。
-            const entry = findEntry(parsed.a, owner)
-            const label = entry === undefined
-              ? FALLBACK_LABEL
-              : (entry.labels.get(parsed.a) || FALLBACK_LABEL)
-            return `@${label}${stampOf(index)}`
+          if (index <= 0) return '［附件已移除］'
+          // 正文占位用 [图片N] / [文件N]：纯文本占位，DSH 不会当文件提及，
+          // 用户也能看出这里是第几张图/第几个文件。
+          let imageCount = 0
+          let fileCount = 0
+          let selfKind
+          try {
+            const ordered = resolveAttachments(runtime.ctx, live)
+            for (let i = 0; i < live.length; i += 1) {
+              const attachment = ordered === undefined ? undefined : ordered[i]
+              const kind = attachment === undefined || attachment === null ? undefined : attachment.kind
+              if (kind === 'image') imageCount += 1
+              else if (kind === 'file') fileCount += 1
+              if (live[i] === parsed.a) { selfKind = kind; break }
+            }
+          } catch (error) {
+            selfKind = undefined
           }
-          return '［附件已移除］'
+          const placeholder = selfKind === 'image'
+            ? `[图片${Math.max(imageCount, 1)}]`
+            : selfKind === 'file' ? `[文件${Math.max(fileCount, 1)}]` : '[附件]'
+          return `${placeholder}${stampOf(index)}`
         }
         // 实时状态取不到就不猜序号：宁可发占位，也不把图指到别的附件上。
         return '［附件已移除］'
@@ -976,180 +1042,6 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * 把一条用户消息的文本和图片恢复到当前草稿：
-     * 文本先 setDraft，图片 fetch 成 File 后合成 paste 事件交给核心 file-intake，
-     * 再由本插件的 reconcile 在光标处补 chip。原型限制：图片先追加到末尾，
-     * 原句中的精确位置/多图顺序不保证完全还原；文件（PDF/Excel）暂不复制。
-     * @param {any} root 按钮所在的 DOM 节点。
-     * @param {unknown} sessionId 目标会话。
-     * @param {any} actions 槽位 standard props 的 inputActions。
-     * @returns {Promise<boolean>} 是否找到消息并执行。
-     */
-    async function restoreMessageToComposer(root, sessionId, actions, context) {
-      if (root === null || root === undefined || typeof root.closest !== 'function') return false
-      const sessionKey = keyOf(sessionId)
-      if (sessionKey === undefined) return false
-      const row = root.closest('[data-chat-flow-kind="user"]')
-      if (row === null || row === undefined) return false
-      const bubble = row.querySelector('[data-message-bubble]')
-      const text = bubble === null ? '' : String(bubble.innerText || '').trim()
-      if (actions === null || actions === undefined || typeof actions.setDraft !== 'function') return false
-      actions.setDraft({ text, references: [] })
-
-      const conversation = context === null || context === undefined ? undefined : context.useConversation
-      const imageUrl = conversation !== null && conversation !== undefined
-        && typeof conversation.imageUrl === 'function'
-        ? (attachment) => conversation.imageUrl(sessionId, attachment)
-        : undefined
-
-      // 1) 消息 content 里的附件（图片 + 文件），拿到 FileAttachmentRef。
-      const refs = []
-      try {
-        const nodes = context === null || context === undefined ? undefined : context.nodes
-        const source = context === null || context === undefined ? undefined : context.source
-        const list = nodes === null || nodes === undefined
-          ? []
-          : (typeof nodes.values === 'function' ? [...nodes.values()] : [...nodes])
-        const node = list.find((item) => item?.data?.source === source || item?.source === source)
-        const attachments = node?.data?.content?.attachments
-        if (Array.isArray(attachments)) refs.push(...attachments)
-      } catch (error) {
-        // content 不可读时退回 DOM 图片。
-      }
-
-      const files = []
-      for (const attachment of refs) {
-        if (attachment === null || attachment === undefined) continue
-        const isImage = attachment.type === 'image'
-        const isFile = attachment.type === 'file'
-        if (!isImage && !isFile) continue
-        const ref = isImage ? attachment.image : attachment.file
-        if (ref === null || ref === undefined) continue
-        const name = isFile ? (ref.name || '') : ((ref.name || '').trim() || `image-${files.length + 1}.png`)
-        try {
-          let url
-          if (typeof imageUrl === 'function') url = await imageUrl(ref)
-          if (typeof url !== 'string' || url === '') continue
-          const response = await fetch(url)
-          if (response.ok === false) continue
-          const blob = await response.blob()
-          files.push(new File([blob], name || `attachment-${files.length + 1}`, { type: blob.type || (isImage ? 'image/png' : 'application/octet-stream') }))
-        } catch (error) {
-          // 单个附件失败不阻塞其余。
-        }
-      }
-
-      // 2) DOM 图片兜底（content 不可读或 imageUrl 缺失时）。
-      if (files.length === 0) {
-        for (const img of row.querySelectorAll('[data-message-attachments] img')) {
-          try {
-            const src = img.currentSrc || img.src
-            if (typeof src !== 'string' || src === '') continue
-            const response = await fetch(src)
-            if (response.ok === false) continue
-            const blob = await response.blob()
-            const name = (img.alt || '').trim() || `image-${files.length + 1}.png`
-            files.push(new File([blob], name, { type: blob.type || 'image/png' }))
-          } catch (error) {
-            // 单张图失败不阻塞其余。
-          }
-        }
-      }
-
-      if (files.length > 0 && typeof document !== 'undefined'
-        && typeof DataTransfer === 'function' && typeof ClipboardEvent === 'function') {
-        const editor = document.querySelector('[data-composer-card] [contenteditable="true"]')
-        if (editor !== null && editor !== undefined) {
-          try {
-            const data = new DataTransfer()
-            for (const file of files) data.items.add(file)
-            editor.dispatchEvent(new ClipboardEvent('paste', {
-              clipboardData: data,
-              bubbles: true,
-              cancelable: true,
-            }))
-          } catch (error) {
-            // 合成 paste 失败时至少把文本放回去。
-          }
-        }
-      }
-      const input = resolveSessionInput(sessionKey)
-      if (input !== null && input !== undefined && typeof input.focus === 'function') input.focus()
-      return true
-    }
-
-    /**
-     * 这条消息是否有图片/文件附件；纯文本消息不显示「复制到输入框」，交给核心复制。
-     * @param {any} node 聊天节点。
-     * @returns {boolean} 是否有附件。
-     */
-    function nodeHasAttachments(node) {
-      try {
-        const content = node?.data?.content
-        if (Array.isArray(content)) {
-          return content.some((block) => block !== null && block !== undefined
-            && (block.type === 'image' || block.type === 'file'))
-        }
-        const attachments = content?.attachments
-        return Array.isArray(attachments) && attachments.length > 0
-      } catch (error) {
-        return false
-      }
-    }
-
-    /**
-     * 用户消息上方的「复制到输入框」动作；不替换核心复制按钮，也不改核心消息渲染。
-     * @param {any} props 槽位 owner props：source / kind。
-     */
-    function RestoreAction(props) {
-      const rootRef = React.useRef(null)
-      const nodesRef = React.useRef(undefined)
-      if (props === null || props === undefined || props.kind !== 'user') return null
-      const nodes = typeof props.useChat === 'function' ? props.useChat((snapshot) => snapshot.nodes) : undefined
-      nodesRef.current = nodes
-      const source = props.source
-      const list = nodes === null || nodes === undefined
-        ? []
-        : (typeof nodes.values === 'function' ? [...nodes.values()] : [...nodes])
-      const node = list.find((item) => item?.data?.source === source || item?.source === source)
-      if (node === undefined || !nodeHasAttachments(node)) return null
-      const onClick = (event) => {
-        try {
-          event.preventDefault()
-          event.stopPropagation()
-        } catch (error) {}
-        restoreMessageToComposer(rootRef.current, props.sessionId, props.inputActions, {
-          nodes: nodesRef.current,
-          source: props.source,
-          useConversation: props.useConversation,
-        }).catch(() => {})
-      }
-      const button = {
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 4,
-        padding: '1px 8px',
-        border: '1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.12))',
-        borderRadius: 999,
-        background: 'transparent',
-        color: 'var(--dsw-alias-label-secondary, #666)',
-        font: 'inherit',
-        fontSize: 11,
-        lineHeight: 1.6,
-        cursor: 'pointer',
-      }
-      return React.createElement('div', {
-        ref: rootRef,
-        style: { display: 'flex', justifyContent: 'flex-end', margin: '0 4px 4px' },
-      }, React.createElement('button', {
-        type: 'button',
-        style: button,
-        title: '复制这条消息的文本和附件到输入框（附件先追加到末尾）',
-        onClick,
-      }, '复制到输入框'))
-    }
-
-    /**
      * 注册覆盖层组件与输入源；任一步失败都不影响另一半。
      * @param {any} ctx 浏览器根上下文（Cordis）。
      */
@@ -1174,18 +1066,6 @@ window.__ModuleLoader__.load({
         }, Overlay))
       } catch (error) {
         console.warn('[inline-attachments] overlay registration failed')
-      }
-
-      // 用户消息上方的「复制到输入框」动作；链式槽，只渲染 user 行。
-      try {
-        ctx.slots.inject('conversation.chat.user.before', () => ctx.slots.register({
-          name: 'conversation.chat.user.before',
-          id: 'inline-attachments-restore',
-          order: 10,
-          select: (owner) => (owner !== null && owner !== undefined && owner.kind === 'user' ? owner : null),
-        }, RestoreAction))
-      } catch (error) {
-        console.warn('[inline-attachments] restore action registration failed')
       }
 
       // 输入源：空 candidates 不参与 @ 菜单，只为 codec/openReference 存在。

@@ -4,7 +4,9 @@
  * The client serializes every inline attachment chip as an invisible marker:
  *   U+2063 (INVISIBLE SEPARATOR) + N × U+200B (ZERO WIDTH SPACE) + U+2063
  * where N is the 1-based attachment position in the submitted content. An
- * invisible marker keeps the client's pending echo and queue rows clean; only
+ * a visible [图片N]/[文件N] placeholder keeps the sent text readable while the
+ * invisible marker still carries the position; the rewrite also pads the placeholder
+ * with single spaces; only
  * the Host sees the marker, and it removes every marker before append.
  *
  * The loop appends the pre-step batch as the durable `user/message`, so
@@ -95,6 +97,25 @@ export function rewriteContent(content) {
   }
 
   if (!changed) return { content: [...content], changed: false }
+
+  // 占位前后各留一个空格，正文不粘字；已有空白不重复加。
+  // 正文首块不加前导空格（DSH 自己会对首 token trimStart，加了也会被去掉）。
+  for (let i = 0; i < next.length; i += 1) {
+    if (!isAttachment(next[i])) continue
+    const prev = next[i - 1]
+    if (isText(prev) && typeof prev.text === 'string') {
+      // 图片/文件占位，以及核心服务缺失时的 [附件] 降级占位。
+      let spaced = prev.text.replace(/(?<!\s)(\[(?:(?:图片|文件)\d+|附件)\])$/u, ' $1')
+      // 消息以占位开头时不补前导空格（DSH 会对首 token trimStart，加了也是噪声）。
+      if (i - 1 === 0 && spaced.startsWith(' ') && !prev.text.startsWith(' ')) spaced = spaced.slice(1)
+      if (spaced !== prev.text) next[i - 1] = { type: 'text', text: spaced }
+    }
+    const following = next[i + 1]
+    if (isText(following) && typeof following.text === 'string'
+      && following.text !== '' && !/^\s/u.test(following.text)) {
+      next[i + 1] = { type: 'text', text: ` ${following.text}` }
+    }
+  }
 
   /* Never lose an attachment the user did not place: append unreferenced ones. */
   for (let index = 0; index < attachments.length; index += 1) {

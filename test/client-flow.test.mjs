@@ -76,11 +76,7 @@ function harness() {
   const ctx = {
     slots: {
       inject: (_name, callback) => { callback() },
-      register: (spec, value) => {
-        if (spec !== null && spec !== undefined && spec.name === 'conversation.chat.user.before') return {}
-        component = value
-        return {}
-      },
+      register: (_spec, value) => { component = value; return {} },
     },
     inputTriggers: { registerSource: (value) => { source = value; return () => {} } },
     effect: (fn) => fn(),
@@ -162,7 +158,7 @@ test('deleting a chip removes its attachment, undo restores it, and a rail delet
 
   const marker = h.source.codec.serialize(refA)
   return marker.then(async (value) => {
-    assert.equal(value, '@cat.png' + '\u2063\u200B\u2063')
+    assert.equal(value, '[图片1]' + '\u2063\u200B\u2063')
 
     // The codec must read the live input order, not a stale render registry.
     h.setLive(stateOf([]))
@@ -178,7 +174,7 @@ test('deleting a chip removes its attachment, undo restores it, and a rail delet
     })
     assert.deepEqual(
       rewritten.content.map((block) => (block.type === 'text' ? `text:${block.text}` : block.type)),
-      ['text:前@cat.png', 'image', 'text:后'],
+      ['text:前 [图片1]', 'image', 'text: 后'],
     )
 
     // Confirm the chip was actually seen by the input state.
@@ -273,7 +269,7 @@ test('duplicate file names get a display suffix', () => {
   h.render(stateOf(['a4', 'a5']))
   assert.equal(h.inserted.length, 2)
   assert.equal(h.inserted[0].reference.label, 'image.png')
-  assert.equal(h.inserted[1].reference.label, 'image.png（2）')
+  assert.equal(h.inserted[1].reference.label, 'image.png (2)')
 })
 
 
@@ -284,7 +280,7 @@ test('a carried chip uses the current session attachment order', async () => {
   h.render(stateOf(['a1']))
   const carried = JSON.stringify({ s: 'old-session', a: 'a1' })
   h.render(stateOf(['a1'], [occurrenceOf(carried, 1, 8)], 'A@cat.png'))
-  assert.equal(await h.source.codec.serialize(carried), '@cat.png' + '\u2063\u200B\u2063')
+  assert.equal(await h.source.codec.serialize(carried), '[图片1]' + '\u2063\u200B\u2063')
 })
 
 
@@ -343,7 +339,7 @@ test('deleting an earlier duplicate does not reuse its number', () => {
   h.render(stateOf(['a4', 'a5'], [], ''))
   assert.deepEqual(h.removed, ['a4'])
   h.render(stateOf(['a5', 'a7']))
-  assert.equal(h.inserted[2].reference.label, 'image.png（3）')
+  assert.equal(h.inserted[2].reference.label, 'image.png (3)')
 })
 
 
@@ -399,4 +395,50 @@ test('a PDF label opens a window without also downloading', () => {
     URL.createObjectURL = previousCreateURL
     URL.revokeObjectURL = previousRevokeURL
   }
+})
+
+test('sent text uses [图片N]/[文件N] placeholders instead of @filename', async () => {
+  globalThis.document.activeElement = { isContentEditable: true }
+  const h = harness()
+  h.render(stateOf([]))
+  h.render(stateOf(['a1', 'a2']))
+  const refA = h.inserted[0].reference.ref
+  const refB = h.inserted[1].reference.ref
+  const stamp = (n) => '\u2063' + '\u200B'.repeat(n) + '\u2063'
+  assert.equal(await h.source.codec.serialize(refA), '[图片1]' + stamp(1))
+  assert.equal(await h.source.codec.serialize(refB), '[图片2]' + stamp(2))
+})
+
+test('file attachments serialize as [文件N] placeholders', async () => {
+  globalThis.document.activeElement = { isContentEditable: true }
+  const h = harness()
+  h.render(stateOf([]))
+  h.render(stateOf(['a3']))
+  const ref = h.inserted[0].reference.ref
+  const stamp = '\u2063' + '\u200B' + '\u2063'
+  assert.equal(await h.source.codec.serialize(ref), '[文件1]' + stamp)
+})
+
+test('a message that starts with an attachment gets no leading space', () => {
+  const rewritten = rewriteMessage({
+    id: 'm1',
+    source: { kind: 'user' },
+    content: [{ type: 'image', attachment: { attachmentId: 'a1' } }, { type: 'text', text: '[图片1]\u2063\u200B\u2063' }],
+  })
+  assert.equal(rewritten.content[0].text, '[图片1]', 'first block keeps no leading space')
+})
+
+test('a file mention between two images keeps placeholder order', () => {
+  const rewritten = rewriteMessage({
+    id: 'm1',
+    source: { kind: 'user' },
+    content: [
+      { type: 'image', attachment: { attachmentId: 'a1' } },
+      { type: 'file', attachment: { attachmentId: 'a3' } },
+      { type: 'image', attachment: { attachmentId: 'a2' } },
+      { type: 'text', text: '[图片1]\u2063\u200B\u2063[文件1]\u2063\u200B\u200B\u2063[图片2]\u2063\u200B\u200B\u200B\u2063' },
+    ],
+  })
+  const kinds = rewritten.content.map((block) => (block.type === 'text' ? `text:${block.text}` : block.attachment.attachmentId))
+  assert.deepEqual(kinds, ['text:[图片1]', 'a1', 'text: [文件1]', 'a3', 'text: [图片2]', 'a2'])
 })

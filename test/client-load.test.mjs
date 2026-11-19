@@ -13,7 +13,7 @@ const react = {
 /** Minimal ReactDOM face for the lightbox portal. */
 const reactDom = { createPortal: (node) => node }
 
-test('client.js loads, registers overlay/restore slots and the trigger source', async () => {
+test('client.js loads, registers the overlay entry and the trigger source', async () => {
   let loaded
   globalThis.window = {
     __ModuleLoader__: {
@@ -57,15 +57,10 @@ test('client.js loads, registers overlay/restore slots and the trigger source', 
 
   mod.apply(ctx)
 
-  const overlay = registrations.find((entry) => entry.name === 'conversation.input.overlay')
-  const restore = registrations.find((entry) => entry.name === 'conversation.chat.user.before')
-  assert.ok(overlay, 'overlay registered')
-  assert.equal(overlay.spec.spec.id, 'inline-attachments')
-  assert.equal(typeof overlay.spec.component, 'function')
-  assert.ok(restore, 'restore action registered')
-  assert.equal(restore.spec.spec.id, 'inline-attachments-restore')
-  assert.equal(typeof restore.spec.spec.select, 'function')
-  assert.equal(typeof restore.spec.component, 'function')
+  assert.equal(registrations.length, 1)
+  assert.equal(registrations[0].name, 'conversation.input.overlay')
+  assert.equal(registrations[0].spec.spec.id, 'inline-attachments')
+  assert.equal(typeof registrations[0].spec.component, 'function')
 
   assert.ok(source, 'source registered')
   assert.equal(source.trigger, '@')
