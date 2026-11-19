@@ -976,6 +976,180 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * 把一条用户消息的文本和图片恢复到当前草稿：
+     * 文本先 setDraft，图片 fetch 成 File 后合成 paste 事件交给核心 file-intake，
+     * 再由本插件的 reconcile 在光标处补 chip。原型限制：图片先追加到末尾，
+     * 原句中的精确位置/多图顺序不保证完全还原；文件（PDF/Excel）暂不复制。
+     * @param {any} root 按钮所在的 DOM 节点。
+     * @param {unknown} sessionId 目标会话。
+     * @param {any} actions 槽位 standard props 的 inputActions。
+     * @returns {Promise<boolean>} 是否找到消息并执行。
+     */
+    async function restoreMessageToComposer(root, sessionId, actions, context) {
+      if (root === null || root === undefined || typeof root.closest !== 'function') return false
+      const sessionKey = keyOf(sessionId)
+      if (sessionKey === undefined) return false
+      const row = root.closest('[data-chat-flow-kind="user"]')
+      if (row === null || row === undefined) return false
+      const bubble = row.querySelector('[data-message-bubble]')
+      const text = bubble === null ? '' : String(bubble.innerText || '').trim()
+      if (actions === null || actions === undefined || typeof actions.setDraft !== 'function') return false
+      actions.setDraft({ text, references: [] })
+
+      const conversation = context === null || context === undefined ? undefined : context.useConversation
+      const imageUrl = conversation !== null && conversation !== undefined
+        && typeof conversation.imageUrl === 'function'
+        ? (attachment) => conversation.imageUrl(sessionId, attachment)
+        : undefined
+
+      // 1) 消息 content 里的附件（图片 + 文件），拿到 FileAttachmentRef。
+      const refs = []
+      try {
+        const nodes = context === null || context === undefined ? undefined : context.nodes
+        const source = context === null || context === undefined ? undefined : context.source
+        const list = nodes === null || nodes === undefined
+          ? []
+          : (typeof nodes.values === 'function' ? [...nodes.values()] : [...nodes])
+        const node = list.find((item) => item?.data?.source === source || item?.source === source)
+        const attachments = node?.data?.content?.attachments
+        if (Array.isArray(attachments)) refs.push(...attachments)
+      } catch (error) {
+        // content 不可读时退回 DOM 图片。
+      }
+
+      const files = []
+      for (const attachment of refs) {
+        if (attachment === null || attachment === undefined) continue
+        const isImage = attachment.type === 'image'
+        const isFile = attachment.type === 'file'
+        if (!isImage && !isFile) continue
+        const ref = isImage ? attachment.image : attachment.file
+        if (ref === null || ref === undefined) continue
+        const name = isFile ? (ref.name || '') : ((ref.name || '').trim() || `image-${files.length + 1}.png`)
+        try {
+          let url
+          if (typeof imageUrl === 'function') url = await imageUrl(ref)
+          if (typeof url !== 'string' || url === '') continue
+          const response = await fetch(url)
+          if (response.ok === false) continue
+          const blob = await response.blob()
+          files.push(new File([blob], name || `attachment-${files.length + 1}`, { type: blob.type || (isImage ? 'image/png' : 'application/octet-stream') }))
+        } catch (error) {
+          // 单个附件失败不阻塞其余。
+        }
+      }
+
+      // 2) DOM 图片兜底（content 不可读或 imageUrl 缺失时）。
+      if (files.length === 0) {
+        for (const img of row.querySelectorAll('[data-message-attachments] img')) {
+          try {
+            const src = img.currentSrc || img.src
+            if (typeof src !== 'string' || src === '') continue
+            const response = await fetch(src)
+            if (response.ok === false) continue
+            const blob = await response.blob()
+            const name = (img.alt || '').trim() || `image-${files.length + 1}.png`
+            files.push(new File([blob], name, { type: blob.type || 'image/png' }))
+          } catch (error) {
+            // 单张图失败不阻塞其余。
+          }
+        }
+      }
+
+      if (files.length > 0 && typeof document !== 'undefined'
+        && typeof DataTransfer === 'function' && typeof ClipboardEvent === 'function') {
+        const editor = document.querySelector('[data-composer-card] [contenteditable="true"]')
+        if (editor !== null && editor !== undefined) {
+          try {
+            const data = new DataTransfer()
+            for (const file of files) data.items.add(file)
+            editor.dispatchEvent(new ClipboardEvent('paste', {
+              clipboardData: data,
+              bubbles: true,
+              cancelable: true,
+            }))
+          } catch (error) {
+            // 合成 paste 失败时至少把文本放回去。
+          }
+        }
+      }
+      const input = resolveSessionInput(sessionKey)
+      if (input !== null && input !== undefined && typeof input.focus === 'function') input.focus()
+      return true
+    }
+
+    /**
+     * 这条消息是否有图片/文件附件；纯文本消息不显示「复制到输入框」，交给核心复制。
+     * @param {any} node 聊天节点。
+     * @returns {boolean} 是否有附件。
+     */
+    function nodeHasAttachments(node) {
+      try {
+        const content = node?.data?.content
+        if (Array.isArray(content)) {
+          return content.some((block) => block !== null && block !== undefined
+            && (block.type === 'image' || block.type === 'file'))
+        }
+        const attachments = content?.attachments
+        return Array.isArray(attachments) && attachments.length > 0
+      } catch (error) {
+        return false
+      }
+    }
+
+    /**
+     * 用户消息上方的「复制到输入框」动作；不替换核心复制按钮，也不改核心消息渲染。
+     * @param {any} props 槽位 owner props：source / kind。
+     */
+    function RestoreAction(props) {
+      const rootRef = React.useRef(null)
+      const nodesRef = React.useRef(undefined)
+      if (props === null || props === undefined || props.kind !== 'user') return null
+      const nodes = typeof props.useChat === 'function' ? props.useChat((snapshot) => snapshot.nodes) : undefined
+      nodesRef.current = nodes
+      const source = props.source
+      const list = nodes === null || nodes === undefined
+        ? []
+        : (typeof nodes.values === 'function' ? [...nodes.values()] : [...nodes])
+      const node = list.find((item) => item?.data?.source === source || item?.source === source)
+      if (node === undefined || !nodeHasAttachments(node)) return null
+      const onClick = (event) => {
+        try {
+          event.preventDefault()
+          event.stopPropagation()
+        } catch (error) {}
+        restoreMessageToComposer(rootRef.current, props.sessionId, props.inputActions, {
+          nodes: nodesRef.current,
+          source: props.source,
+          useConversation: props.useConversation,
+        }).catch(() => {})
+      }
+      const button = {
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        padding: '1px 8px',
+        border: '1px solid var(--dsw-alias-border-l1, rgba(0,0,0,0.12))',
+        borderRadius: 999,
+        background: 'transparent',
+        color: 'var(--dsw-alias-label-secondary, #666)',
+        font: 'inherit',
+        fontSize: 11,
+        lineHeight: 1.6,
+        cursor: 'pointer',
+      }
+      return React.createElement('div', {
+        ref: rootRef,
+        style: { display: 'flex', justifyContent: 'flex-end', margin: '0 4px 4px' },
+      }, React.createElement('button', {
+        type: 'button',
+        style: button,
+        title: '复制这条消息的文本和附件到输入框（附件先追加到末尾）',
+        onClick,
+      }, '复制到输入框'))
+    }
+
+    /**
      * 注册覆盖层组件与输入源；任一步失败都不影响另一半。
      * @param {any} ctx 浏览器根上下文（Cordis）。
      */
@@ -1000,6 +1174,18 @@ window.__ModuleLoader__.load({
         }, Overlay))
       } catch (error) {
         console.warn('[inline-attachments] overlay registration failed')
+      }
+
+      // 用户消息上方的「复制到输入框」动作；链式槽，只渲染 user 行。
+      try {
+        ctx.slots.inject('conversation.chat.user.before', () => ctx.slots.register({
+          name: 'conversation.chat.user.before',
+          id: 'inline-attachments-restore',
+          order: 10,
+          select: (owner) => (owner !== null && owner !== undefined && owner.kind === 'user' ? owner : null),
+        }, RestoreAction))
+      } catch (error) {
+        console.warn('[inline-attachments] restore action registration failed')
       }
 
       // 输入源：空 candidates 不参与 @ 菜单，只为 codec/openReference 存在。

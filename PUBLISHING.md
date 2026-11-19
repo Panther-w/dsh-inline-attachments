@@ -1,17 +1,17 @@
 # 发布材料（0.1.2）
 
-> GitHub/npm `0.1.1` 已发布；`0.1.2` 本地准备（改名“输入框图片与文件” + 发送后保留 `@文件名`），待发；市场暂缓。
+> GitHub/npm `0.1.2` 已发布；`0.1.3`（复制到输入框：文本+图片；文件暂不复制）本地准备，待发布；市场暂缓。
 
 ## 身份
 
 - 名称：`dsh-inline-attachments`
-- 版本：`0.1.2`（本地准备，待发）
+- 版本：`0.1.3`（本地准备，待发）
 - 作者：`Panther-w`
 - 许可：MIT
 - 仓库：`https://github.com/Panther-w/dsh-inline-attachments`
 - npm：`dsh-inline-attachments`
 - 实测：macOS DSH Desktop `0.2.2-rc.3`
-- 发布状态：GitHub `v0.1.1` / npm `0.1.1` 已发布；`0.1.2` 待发
+- 发布状态：GitHub `v0.1.2` / npm `0.1.2` 已发布；`0.1.3` 待发
 
 ## 一句话（GitHub / npm / 市场统一）
 
@@ -42,6 +42,9 @@ English：**Put images/files where you mean them — the model reads them in tha
 - 图片/文件在光标处变成小标签，发送时按标签位置重排。
 - 删正文小标签会连附件一起删，撤销能找回；同名文件加（2）（3）。
 - 发送后消息文本保留 `@文件名`，图片在同一位置。
+- 已发送消息上方提供「复制到输入框」：恢复文本和图片；图片追加到末尾；文件暂不复制，等 DSH 附件重挂接口。
+- 0.1.3 发布图：`docs/preview.jpg`（已有）后接 `docs/copy-to-composer.jpg`（复制到输入框按钮+消息示例）。
+- GitHub Release 0.1.3 正文用两张 raw 图：preview.jpg → copy-to-composer.jpg。
 - 图片点开看大图；PDF 打开，Excel 等下载。
 - 悬浮标签时，上方对应缩略图会描边。
 

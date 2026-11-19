@@ -76,7 +76,11 @@ function harness() {
   const ctx = {
     slots: {
       inject: (_name, callback) => { callback() },
-      register: (_spec, value) => { component = value; return {} },
+      register: (spec, value) => {
+        if (spec !== null && spec !== undefined && spec.name === 'conversation.chat.user.before') return {}
+        component = value
+        return {}
+      },
     },
     inputTriggers: { registerSource: (value) => { source = value; return () => {} } },
     effect: (fn) => fn(),
