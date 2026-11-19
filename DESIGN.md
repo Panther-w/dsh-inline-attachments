@@ -29,7 +29,7 @@
 ## 3. 标记协议（不可见）
 
 - 形态：`U+2063` + `N × U+200B` + `U+2063`；`N` 为 1 起的附件序号。
-- 为什么不可见：提交的 text 先出现在发送回显/队列行里；不可见标记让这些界面保持干净，只有宿主解析。
+- 为什么标记不可见、链接可见：`serialize` 返回 `@label` + 不可见标记；发送回显/会话文本里能看到 `@label`，标记只给宿主解析；宿主在标记处插图片，链接留在文本里。
 - 为什么用序号：图片耐久 `sha256:` id 在 Host 归一化后才生成；composer 上传状态只保留 `receiptId`，客户端发送前拿不到耐久 id。序号是客户端与宿主共享的稳定量。
 - 序号在**提交时**算：codec 读 `input.state.getSnapshot()` 的实时 `attachmentIds`；取不到就发占位，不猜旧 registry 的序号。chip 的归属会话由 `refOwner` 决定（切工作区后 ref 里的旧 session 不可用）。
 - **同标记只取第一次**：宿主用 `used` 集合，重复/伪造的标记不会把同一附件插两次；缺附件/未知标记直接丢弃。
@@ -100,10 +100,10 @@ ctx.on('agent/pre-step', async (_payload, next) => {
 
 ## 9. 验收
 
-- 宿主：`test/host.test.mjs` 10 个用例：交错、文件顺序、缺号/越界、无标记、未引用附件、非 user、冻结、无附件删标记、多 text 块、重复标记只插一次。
+- 宿主：`test/host.test.mjs` 11 个用例：交错、文件顺序、缺号/越界、无标记、未引用附件、非 user、冻结、无附件删标记、多 text 块、重复标记只插一次、保留 `@label`。
 - 宿主接线：`test/host-wiring.test.mjs` 2 个（pre-step 注册、enter/reject）。
 - 客户端：`test/client-load.test.mjs` 1 个（模块装载、slot 注册、source/codec）；`test/client-flow.test.mjs` 11 个（首挂 seed、保留光标插入、删 chip/撤销、rail 删文末/段中 chip、同步订阅、quote/command 阻断、同名序号、跨会话 refOwner、删除后同名不占号、未确认 chip 补删、同拍批量删、删先前同名后不复用编号）。
-- 共 27 个测试；`node --check client.js` 通过；安装后人工验收（粘 3 张图、中间打字、删中间附件、有选区粘贴、发送、看模型是否按位置回答）。
+- 共 28 个测试；`node --check client.js` 通过；安装后人工验收（粘 3 张图、中间打字、删中间附件、有选区粘贴、发送、看模型是否按位置回答）。
 
 ## 10. 未核验 / 风险
 

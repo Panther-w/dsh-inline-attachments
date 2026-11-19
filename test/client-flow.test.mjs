@@ -158,7 +158,7 @@ test('deleting a chip removes its attachment, undo restores it, and a rail delet
 
   const marker = h.source.codec.serialize(refA)
   return marker.then(async (value) => {
-    assert.equal(value, '\u2063\u200B\u2063')
+    assert.equal(value, '@cat.png' + '\u2063\u200B\u2063')
 
     // The codec must read the live input order, not a stale render registry.
     h.setLive(stateOf([]))
@@ -174,7 +174,7 @@ test('deleting a chip removes its attachment, undo restores it, and a rail delet
     })
     assert.deepEqual(
       rewritten.content.map((block) => (block.type === 'text' ? `text:${block.text}` : block.type)),
-      ['text:前', 'image', 'text:后'],
+      ['text:前@cat.png', 'image', 'text:后'],
     )
 
     // Confirm the chip was actually seen by the input state.
@@ -280,7 +280,7 @@ test('a carried chip uses the current session attachment order', async () => {
   h.render(stateOf(['a1']))
   const carried = JSON.stringify({ s: 'old-session', a: 'a1' })
   h.render(stateOf(['a1'], [occurrenceOf(carried, 1, 8)], 'A@cat.png'))
-  assert.equal(await h.source.codec.serialize(carried), '\u2063\u200B\u2063')
+  assert.equal(await h.source.codec.serialize(carried), '@cat.png' + '\u2063\u200B\u2063')
 })
 
 

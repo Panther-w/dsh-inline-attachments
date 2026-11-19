@@ -82,3 +82,12 @@ test('a duplicated marker inserts the attachment once', () => {
   ]))
   assert.deepEqual(kinds(rewritten.content), ['image'])
 })
+
+
+test('keeps the visible chip label in the text before the image', () => {
+  const rewritten = rewriteMessage(userMessage([
+    image('a'),
+    text(`前@cat.png${stamp(1)}后`),
+  ]))
+  assert.deepEqual(kinds(rewritten.content), ['text:前@cat.png', 'image', 'text:后'])
+})

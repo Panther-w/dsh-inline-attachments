@@ -883,7 +883,16 @@ window.__ModuleLoader__.load({
         const live = owner === undefined ? undefined : liveAttachmentIds(owner)
         if (live !== undefined) {
           const index = live.indexOf(parsed.a) + 1
-          return index > 0 ? stampOf(index) : '［附件已移除］'
+          if (index > 0) {
+            // 保留 chip 的可见链接（@文件名），让发送后的文本也带着它；
+            // 标记仍放在链接后面，Host 在标记处插入图片块。
+            const entry = findEntry(parsed.a, owner)
+            const label = entry === undefined
+              ? FALLBACK_LABEL
+              : (entry.labels.get(parsed.a) || FALLBACK_LABEL)
+            return `@${label}${stampOf(index)}`
+          }
+          return '［附件已移除］'
         }
         // 实时状态取不到就不猜序号：宁可发占位，也不把图指到别的附件上。
         return '［附件已移除］'

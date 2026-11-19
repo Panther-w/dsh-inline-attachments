@@ -1,17 +1,17 @@
-# 发布材料（0.1.1）
+# 发布材料（0.1.2）
 
-> GitHub 仓库/Release 和 npm `0.1.1` 已发布；市场暂缓。以下保留为后续市场提交与维护记录。
+> GitHub/npm `0.1.1` 已发布；`0.1.2` 本地准备（改名“输入框图片与文件” + 发送后保留 `@文件名`），待发；市场暂缓。
 
 ## 身份
 
 - 名称：`dsh-inline-attachments`
-- 版本：`0.1.1`
+- 版本：`0.1.2`（本地准备，待发）
 - 作者：`Panther-w`
 - 许可：MIT
 - 仓库：`https://github.com/Panther-w/dsh-inline-attachments`
 - npm：`dsh-inline-attachments`
 - 实测：macOS DSH Desktop `0.2.2-rc.3`
-- 发布状态：GitHub `v0.1.1` 已发布；npm `0.1.1` 已发布
+- 发布状态：GitHub `v0.1.1` / npm `0.1.1` 已发布；`0.1.2` 待发
 
 ## 一句话（GitHub / npm / 市场统一）
 
@@ -41,10 +41,11 @@ English：**Put images/files where you mean them — the model reads them in tha
 ### 功能
 - 图片/文件在光标处变成小标签，发送时按标签位置重排。
 - 删正文小标签会连附件一起删，撤销能找回；同名文件加（2）（3）。
+- 发送后消息文本保留 `@文件名`，图片在同一位置。
 - 图片点开看大图；PDF 打开，Excel 等下载。
 - 悬浮标签时，上方对应缩略图会描边。
 
-27 个自动测试 + 多轮人工测试。MIT。
+28 个自动测试 + 多轮人工测试。MIT。
 ```
 
 ## npm
